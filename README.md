@@ -1,5 +1,5 @@
 # CS411Group3
-Contains CS411 Group 3's Project Proposal
+Contains CS411 Group 3's Project Proposal\
 Group members: Sam Scher, Will Regan, Yuxin Liang, Changyan Weng, and Hao Fu
 
 Project Proposal 1: My Day at BU
