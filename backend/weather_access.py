@@ -33,7 +33,7 @@ def get_lat_lon_from_input(key: str, city: str, state: str = "", country: str = 
             return city_data_dict["lat"], city_data_dict["lon"]
         else:
             print("Error in Getting City From Input. Try fixing spelling or spacing!")
-            return None, None
+            raise ValueError("Invalid Location")
     else:
         raise ValueError("Your inputs contain non-alphabetic or space characters")
 
