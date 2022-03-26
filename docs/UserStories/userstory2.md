@@ -1,8 +1,3 @@
 # User Story 2
-
-## Description
-
-It's a beautfiul sunny weekend in August, and their having a picnic with friends.
-
-They want a spunky indie-rock playlist to fit the mood, but all they listen to is country.
-Using the webapp, they can generate something curated for their scenario.
+## == New Genre Barbecue ==
+It's a beautfiul sunny summer weekend in southern US, and the user is having a picnic/barbecue with friends. The user wants to make a playlist to match the weather, but his friends want to explore the genre of spunky indie-rock, but their liked songs only contain country music. He wants to use our web app to make a playlist that matches the mood and has a specific genre.
