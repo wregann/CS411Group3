@@ -1,5 +1,6 @@
 import json, requests
-from typing import Tuple
+from typing import List, Tuple
+import arrow
 
 def get_lat_lon_from_input(key: str, city: str, state: str = "", country: str = "") -> Tuple[float, float]:
     """
@@ -53,6 +54,18 @@ def get_5_day_data(key: str, lat: float, lon: float) -> dict:
     response = requests.get(complete_url)
     five_day_data = response.json()
     return five_day_data
+
+def get_5_days() -> List:
+    """
+    Get Strings for the next five days
+    
+    Returns:
+    Strings of dates for the next 5 days
+    """
+    days = []
+    for i in range(5):
+        days.append(arrow.now().shift(days=i).format('dddd MM-DD-YYYY'))
+    return days
 
 
 

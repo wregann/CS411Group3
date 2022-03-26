@@ -1,5 +1,4 @@
 from flask_restful import Api, Resource, reqparse
-
 class WeatherifyApiHandler(Resource):
   def get(self):
     return {

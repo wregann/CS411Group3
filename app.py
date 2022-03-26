@@ -24,7 +24,7 @@ app = Flask(__name__)
 
 @app.route("/", defaults={'path':''})
 def serve(path):
-    return render_template('example.html')
+    return render_template('example.html', value=wa.get_5_days())
 
 #api.add_resource(WeatherifyApiHandler, '/flask/hello')
 
