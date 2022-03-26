@@ -5,3 +5,4 @@
 
 Therefore, they open this music webapp, and the music from automatic push makes imagination becomes more colorful and peaceful.
 
+When I open this webapp, with just one click, the web would check the weather and then play the music based on the snow weather and the cold temperature by automatically check the users' location after permitted.
