@@ -1,4 +1,5 @@
-==Snow day==
+# User Story 3
+## == Snow Day ==
 
 ​	It is a quiet snow day outside in Decemeber. People are staying at home and watch the ice flower on the window, and they are imaging the happiness would happened in the close futuer-"Christmas".
 
