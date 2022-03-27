@@ -1,18 +1,19 @@
 from multiprocessing.sharedctypes import Value
 import weather_access as wa
 import spotify_access as sa
-import backend.creds as creds
+import creds
 from flask import Flask, send_from_directory, render_template
 from flask_restful import Api, Resource, reqparse
 from flask_cors import CORS #comment this on deployment
 
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder="../templates")
+CORS(app)
 #CORS(app) #comment this on deployment
 #api = Api(app)
 
 @app.route("/")
-def serve(path):
+def serve():
     return render_template('example.html', value=wa.get_5_days())
 
 @app.route("/events/weather_data/<city_string>", methods = ['GET'])
