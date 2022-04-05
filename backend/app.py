@@ -11,10 +11,6 @@ import json
 import os
 from flask_mysqldb import MySQL
 
-
-
-
-
 app = Flask(__name__, template_folder="../templates")
 CORS(app)
 app.config['MYSQL_HOST'] = creds.DB_HOSTNAME
