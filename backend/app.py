@@ -1,41 +1,99 @@
+from multiprocessing import AuthenticationError
 from multiprocessing.sharedctypes import Value
+from pickle import NONE
 import weather_access as wa
 import creds
 from flask import Flask, render_template, redirect, request, session, make_response,session,redirect
 from flask_restful import Api, Resource, reqparse
 from flask_cors import CORS #comment this on deployment
+from flask_session import Session
 import time
 import spotipy
-import jso
+import json
 import os
 from flask_mysqldb import MySQL
+import uuid
 
 app = Flask(__name__, template_folder="../templates")
-CORS(app)
+
 app.config['MYSQL_HOST'] = creds.DB_HOSTNAME
 app.config['MYSQL_USER'] = creds.DB_USERNAME
 app.config['MYSQL_PASSWORD'] = creds.DB_PASSWORD
 app.config['MYSQL_DB'] = "WeatherifyDB"
- 
+app.config['SECRET_KEY'] = os.urandom(64)
+app.config['SESSION_TYPE'] = 'filesystem'
+
+# Set flask session cache directory, make it if it isnt there
+if not os.path.exists('./.flask_session/'):
+    os.makedirs('./.flask_session/')
+app.config['SESSION_FILE_DIR'] = './.flask_session/'
+
+
 mysql = MySQL(app)
-#CORS(app) #comment this on deployment
-#api = Api(app)
 app.secret_key = creds.APP_SECRET
 API_BASE = 'https://accounts.spotify.com'
-REDIRECT_URI = "http://127.0.0.1:1000/spotify_callback"
-
+REDIRECT_URI = "http://127.0.0.1:1000/"
 SCOPE = 'playlist-modify-private,playlist-modify-public,ugc-image-upload,user-library-read'
 
-@app.route("/")
-def reroute_to_main():
-    return redirect("/main")
+Session(app)
+CORS(app, supports_credentials=True)
 
-@app.route("/main")
-def serve():
+caches_folder = './.spotify_caches/'
+if not os.path.exists(caches_folder):
+    os.makedirs(caches_folder)
+
+def session_cache_path():
+    session_cache_path_string = caches_folder + session.get("uuid")
+    if "not set" in session_cache_path_string:
+        raise ValueError("not set in cache string")
+    print("Session Cache Path: ", session_cache_path_string)
+    return session_cache_path_string
+
+
+@app.route("/")
+def index():
+    print("----------------------------INDEX---------------------------------------------------")
+    if session.get('uuid', None) == None:
+        # Step 1. Visitor is unknown, give random ID
+        print("Making User uuid")
+        session['uuid'] = str(uuid.uuid4())
+        session.modified = True
+    else:
+        print("User uuid still in session")
+    print("Current uuid: ", session.get("uuid"))
+
+    cache_handler = spotipy.cache_handler.CacheFileHandler(cache_path=session_cache_path())
+    sp_oauth = spotipy.oauth2.SpotifyOAuth(client_id = creds.SPOTIFY_ID, client_secret = creds.SPOTIFY_SECRET, redirect_uri = REDIRECT_URI, scope = SCOPE, cache_handler=cache_handler, show_dialog=True)
+    
+   
+
+    if request.args.get("code"):
+        # Step 3. Being redirected from Spotify auth page
+        sp_oauth.get_access_token(request.args.get("code"))
+        # Step 4. Signed in, display data
+        return redirect("/")
+    
+
+
+    if not sp_oauth.validate_token(cache_handler.get_cached_token()):
+        # Step 2. Display sign in link when no token
+        auth_url = sp_oauth.get_authorize_url()
+        print("sign in at : ", auth_url)
+    
+    else:
+        sp = spotipy.Spotify(auth_manager=sp_oauth)
+        print("Signed in with id: ", sp.me()['id'])
+    
+
+
+    print("----------------------------END OF INDEX---------------------------------------------")
     return render_template('example.html', value=wa.get_5_days())
 
 @app.route("/get_weather_data/<city_string>", methods = ['GET'])
+
+
 def get_weather_data(city_string):
+    print("----------------------------GET WEATHER DATA--------------------------------")
     try:
         lat, lon = wa.get_lat_lon_from_input(key=creds.OPENWEATHER_KEY, city=city_string)
     except ValueError as e:
@@ -47,51 +105,45 @@ def get_weather_data(city_string):
     except ValueError as e:
         print(e)
         return 'Error: could not get weather data from latitude and lognitude'
-    
+    print("----------------------------END OF GET WEATHER DATA--------------------------------")
     return five_day_data_dict
 
 # authorization-code-flow Step 1. Have your application request authorization; 
 # the user logs in and authorizes access
 @app.route("/spotify_login")
 def verify():
+    print("----------------------------SPOTIFY LOGIN VERIFY--------------------------------")
     # Don't reuse a SpotifyOAuth object because they store token info and you could leak user tokens if you reuse a SpotifyOAuth object
-    sp_oauth = spotipy.oauth2.SpotifyOAuth(client_id = creds.SPOTIFY_ID, client_secret = creds.SPOTIFY_SECRET, redirect_uri = REDIRECT_URI, scope = SCOPE)
+    print("UUID HERE: ", session.get("uuid"))
+    cache_handler = spotipy.cache_handler.CacheFileHandler(cache_path=session_cache_path())
+    sp_oauth = spotipy.oauth2.SpotifyOAuth(client_id = creds.SPOTIFY_ID, client_secret = creds.SPOTIFY_SECRET, redirect_uri = REDIRECT_URI, scope = SCOPE, cache_handler=cache_handler)
+    
     auth_url = sp_oauth.get_authorize_url()
-    print(auth_url)
+    print("Going to auth_url")
+    print("----------------------------END OF SPOTIFY LOGIN VERIFY--------------------------------")
     return redirect(auth_url)
-
-# authorization-code-flow Step 2.
-# Have your application request refresh and access tokens;
-# Spotify returns access and refresh tokens
-@app.route("/spotify_callback")
-def api_callback():
-    # Don't reuse a SpotifyOAuth object because they store token info and you could leak user tokens if you reuse a SpotifyOAuth object
-    sp_oauth = spotipy.oauth2.SpotifyOAuth(client_id = creds.SPOTIFY_ID, client_secret = creds.SPOTIFY_SECRET, redirect_uri = REDIRECT_URI, scope = SCOPE)
-    session.clear()
-    code = request.args.get('code')
-    token_info = sp_oauth.get_access_token(code)
-
-    # Saving the access token along with all other token related info
-    session["token_info"] = token_info
-    return redirect("/main")
 
 # authorization-code-flow Step 3.
 # Use the access token to access the Spotify Web API;
 # Spotify returns requested data
 @app.route("/go", methods=['POST', 'GET'])
 def go():
-    session['token_info'], authorized = get_token(session)
-    session.modified = True
-    if not authorized:
+    print("----------------------------GO--------------------------------")
+    print("Current uuid: ", session.get('uuid'))
+    cache_handler = spotipy.cache_handler.CacheFileHandler(cache_path=session_cache_path())
+    sp_oauth = spotipy.oauth2.SpotifyOAuth(client_id = creds.SPOTIFY_ID, client_secret = creds.SPOTIFY_SECRET, redirect_uri = REDIRECT_URI, scope = SCOPE, cache_handler=cache_handler)
+    if not sp_oauth.validate_token(cache_handler.get_cached_token()):
+        print("Error in getting valid token, sent back")
+        print("----------------------------END OF GO--------------------------------")
         return redirect('/')
-    sp = spotipy.Spotify(auth=session.get('token_info').get('access_token'))
+
+    sp = spotipy.Spotify(auth_manager=sp_oauth)
     spotify_user_id = sp.me()['id']
-    print(sp.me()['display_name'])
     # Get weather data from form
     data = request.form
     weather_main = ""
     weather_description = ""
-    temperature = 272 # in kelvin
+    temperature = 290 # in kelvin
     
     
     # Check if user is in system
@@ -108,7 +160,7 @@ def go():
     
     # If user is in system, songs are already in database
     # If user is not in system
-    print(in_system)
+    print("User in Databse: ", in_system)
     if not in_system:
         tracks = []
         songs_to_add = []
@@ -157,7 +209,8 @@ def go():
         AVG(energy) as energy_avg, STD(energy) as energy_std FROM song_stats WHERE song_id IN (SELECT song_id FROM user_songs WHERE user_id = %s);"""
     cursor.execute(get_stats_sql, [spotify_user_id])
     row = cursor.fetchone()
-    if None in row:
+    print("----------------", row, "-------------------")
+    if not (row == None or len(row) == 0 or row[0] == None):
         user_pop_stats = [round(float(x),3) for x in row]
     else:
         print("Error in getting songs of user, returned no songs")
@@ -190,17 +243,27 @@ def go():
             for off in range(100, len(custom_ids), 100):
                 sp.user_playlist_add_tracks(user=spotify_user_id, playlist_id=playlist[1], tracks=custom_ids[off:off+100])
             break
-    
-    return redirect("main")
+    print("Playlist Created: ", playlist_name, " for ", spotify_user_id)
+    print("----------------------------END OF GO--------------------------------")
+    return redirect("/")
 
 # Get user information out of table
 @app.route("/out", methods=['GET'])
 def remove_info():
-    session['token_info'], authorized = get_token(session)
-    session.modified = True
-    if not authorized:
+    print("---------------------------------------------OUT--------------------------------")
+    cache_handler = spotipy.cache_handler.CacheFileHandler(cache_path=session_cache_path())
+    sp_oauth = spotipy.oauth2.SpotifyOAuth(client_id = creds.SPOTIFY_ID, client_secret = creds.SPOTIFY_SECRET, redirect_uri = REDIRECT_URI, scope = SCOPE, cache_handler=cache_handler)
+    if not sp_oauth.validate_token(cache_handler.get_cached_token()):
+        print("Spotify User not signed in, only clearing session data")
+        try:
+            os.remove(session_cache_path())
+            session.clear()
+        except OSError as e:
+            print ("Error: %s - %s." % (e.filename, e.strerror))
+            print("---------------------------------------------END OF OUT--------------------------------")
         return redirect('/')
-    sp = spotipy.Spotify(auth=session.get('token_info').get('access_token'))
+    sp = spotipy.Spotify(auth_manager=sp_oauth)
+
     spotify_user_id = sp.me()['id']
     #Creating a connection cursor
     cursor = mysql.connection.cursor()
@@ -214,8 +277,13 @@ def remove_info():
         cursor.close()
     except:
         print("Error in removing user info from users")   
-    session.clear()
-    return redirect("main")
+    try:
+        os.remove(session_cache_path())
+        session.clear()
+    except OSError as e:
+        print ("Error: %s - %s." % (e.filename, e.strerror))
+        print("---------------------------------------------END OF OUT--------------------------------")
+    return redirect("/")
 
 # Generates the second half of the SQL statement for song parameters based on weather description
 def get_custom_playlist_sql(main_weather: str, description_weather: str, temp: int,
@@ -251,27 +319,19 @@ def get_custom_playlist_sql(main_weather: str, description_weather: str, temp: i
       
     return "tempo >= {0} AND tempo <= {1}".format(tempo_lower, tempo_upper)
 
-# Checks to see if token is valid and gets a new token if not
-def get_token(session):
-    token_valid = False
-    token_info = session.get("token_info", {})
-
-    # Checking if the session already has a token stored
-    if not (session.get('token_info', False)):
-        token_valid = False
-        return token_info, token_valid
-
-    # Checking if token has expired
-    now = int(time.time())
-    is_token_expired = session.get('token_info').get('expires_at') - now < 60
-
-    # Refreshing token if it has expired
-    if (is_token_expired):
-        # Don't reuse a SpotifyOAuth object because they store token info and you could leak user tokens if you reuse a SpotifyOAuth object
-        sp_oauth = spotipy.oauth2.SpotifyOAuth(client_id = creds.SPOTIFY_ID, client_secret = creds.SPOTIFY_SECRET, redirect_uri = REDIRECT_URI, scope = SCOPE)
-        token_info = sp_oauth.refresh_access_token(session.get('token_info').get('refresh_token'))
-    token_valid = True
-    return token_info, token_valid
+# For testing multiple users
+@app.route('/current_user')
+def current_user():
+    print("----------------------CURRENT USER--------------------------------")
+    cache_handler = spotipy.cache_handler.CacheFileHandler(cache_path=session_cache_path())
+    auth_manager = spotipy.oauth2.SpotifyOAuth(client_id = creds.SPOTIFY_ID, client_secret = creds.SPOTIFY_SECRET, redirect_uri = REDIRECT_URI, scope = SCOPE, cache_handler=cache_handler)
+    if not auth_manager.validate_token(cache_handler.get_cached_token()):
+        print("failed to get current user")
+        return redirect('/')
+    spotify = spotipy.Spotify(auth_manager=auth_manager)
+    print("Current User: ", spotify.me()['id'])
+    print("----------------------END OF CURRENT USER--------------------------------")
+    return redirect("/")
 
 if __name__ == "__main__":
     app.run(port=1000, debug=True)
