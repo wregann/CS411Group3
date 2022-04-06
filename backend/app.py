@@ -1,13 +1,12 @@
 from multiprocessing.sharedctypes import Value
 import weather_access as wa
-import spotify_access as sa
 import creds
 from flask import Flask, render_template, redirect, request, session, make_response,session,redirect
 from flask_restful import Api, Resource, reqparse
 from flask_cors import CORS #comment this on deployment
 import time
 import spotipy
-import json
+import jso
 import os
 from flask_mysqldb import MySQL
 
@@ -27,6 +26,9 @@ REDIRECT_URI = "http://127.0.0.1:1000/spotify_callback"
 
 SCOPE = 'playlist-modify-private,playlist-modify-public,ugc-image-upload,user-library-read'
 
+@app.route("/")
+def reroute_to_main():
+    return redirect("/main")
 
 @app.route("/main")
 def serve():
@@ -71,8 +73,6 @@ def api_callback():
 
     # Saving the access token along with all other token related info
     session["token_info"] = token_info
-
-
     return redirect("/main")
 
 # authorization-code-flow Step 3.
@@ -84,14 +84,20 @@ def go():
     session.modified = True
     if not authorized:
         return redirect('/')
-    data = request.form
     sp = spotipy.Spotify(auth=session.get('token_info').get('access_token'))
-    spotify_username = sp.me()['id']
+    spotify_user_id = sp.me()['id']
+    print(sp.me()['display_name'])
+    # Get weather data from form
+    data = request.form
+    weather_main = ""
+    weather_description = ""
+    temperature = 272 # in kelvin
+    
     
     # Check if user is in system
     in_system = False
     cursor = mysql.connection.cursor() 
-    cursor.execute("SELECT username FROM users WHERE username = %s LIMIT 1;", [spotify_username])
+    cursor.execute("SELECT user_id FROM user_dates WHERE user_id = %s LIMIT 1;", [spotify_user_id])
     if len(cursor.fetchall()) > 0:
         in_system = True
     try:
@@ -102,6 +108,7 @@ def go():
     
     # If user is in system, songs are already in database
     # If user is not in system
+    print(in_system)
     if not in_system:
         tracks = []
         songs_to_add = []
@@ -124,12 +131,13 @@ def go():
         
         #Creating a connection cursor
         cursor = mysql.connection.cursor()
-        sql = """INSERT IGNORE INTO songs 
-        (id,name,artist,energy,tempo,danceability,loudness,valence,speechiness,liveness,instrumentalness,duration_ms,song_key)
+        sql = """INSERT IGNORE INTO song_stats 
+        (song_id,name,artist,energy,tempo,danceability,loudness,valence,speechiness,liveness,instrumentalness,duration_ms,song_key)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);"""
         cursor.executemany(sql, songs_to_add)
-        sql2 = "INSERT IGNORE INTO users (id,username) VALUES (%s, %s);"
-        cursor.executemany(sql2, [[x, spotify_username] for x in tracks])
+        sql2 = "INSERT IGNORE INTO user_songs (song_id,user_id) VALUES (%s, %s);"
+        cursor.executemany(sql2, [[x, spotify_user_id] for x in tracks])
+        
         try:
             #Saving the Actions performed on the DB
             mysql.connection.commit()
@@ -137,14 +145,30 @@ def go():
             cursor.close()
         except:
             print("Error in adding songs to database")
-    
-    print("In System: " + str(in_system))
-    
-    # Create custom playlist
+        
+    # Update User Access Time
     cursor = mysql.connection.cursor()
-    custom_sql_left = "SELECT id FROM songs WHERE id IN (SELECT id FROM users WHERE username = %s) AND "
-    custom_sql = custom_sql_left + get_custom_playlist_sql("", "") + ";"
-    cursor.execute(custom_sql, [spotify_username])
+    user_dates_sql = "INSERT IGNORE INTO user_dates (user_id, datetime_accessed) VALUES(%s, now()) ON DUPLICATE KEY UPDATE datetime_accessed=now()"
+    print(spotify_user_id)
+    cursor.execute(user_dates_sql, [spotify_user_id])
+    
+    # Get user liked songs population statistics
+    get_stats_sql = """SELECT AVG(tempo) AS tempo_avg, STD(tempo) AS tempo_std, 
+        AVG(energy) as energy_avg, STD(energy) as energy_std FROM song_stats WHERE song_id IN (SELECT song_id FROM user_songs WHERE user_id = %s);"""
+    cursor.execute(get_stats_sql, [spotify_user_id])
+    row = cursor.fetchone()
+    if None in row:
+        user_pop_stats = [round(float(x),3) for x in row]
+    else:
+        print("Error in getting songs of user, returned no songs")
+        return redirect("main")
+    
+    # Execute sql to get custom playlist
+    custom_sql_left = "SELECT song_id FROM song_stats WHERE song_id IN (SELECT song_id FROM user_songs WHERE user_id = %s) AND "
+    custom_sql = custom_sql_left + get_custom_playlist_sql(main_weather=weather_main, 
+                                                           description_weather=weather_description, temp=temperature, 
+                                                           user_pop_stats=user_pop_stats) + ";"
+    cursor.execute(custom_sql, [spotify_user_id])
     custom_ids = [x[0] for x in cursor.fetchall()]
     try:
         #Saving the Actions performed on the DB
@@ -154,17 +178,17 @@ def go():
     except:
         print("Error in getting song custom id selection from database")
     
-    playlist_name = "Weatherify Test Playlist"
-    playlists = [p['name'] for p in sp.user_playlists(user=spotify_username)['items']]
+    playlist_name = "Weatherify Test Playlist (Temp={0}) (Weather={1})".format(temperature, weather_description)
+    playlists = [p['name'] for p in sp.user_playlists(user=spotify_user_id)['items']]
     if playlist_name not in playlists:
-        sp.user_playlist_create(user=spotify_username, name=playlist_name)
+        sp.user_playlist_create(user=spotify_user_id, name=playlist_name)
         
-    playlists = [(p['name'], p['id']) for p in sp.user_playlists(user=spotify_username)['items']]
+    playlists = [(p['name'], p['id']) for p in sp.user_playlists(user=spotify_user_id)['items']]
     for playlist in playlists:
         if playlist[0] == playlist_name:
-            sp.user_playlist_replace_tracks(user=spotify_username, playlist_id=playlist[1], tracks=custom_ids[:100])
+            sp.user_playlist_replace_tracks(user=spotify_user_id, playlist_id=playlist[1], tracks=custom_ids[:100])
             for off in range(100, len(custom_ids), 100):
-                sp.user_playlist_add_tracks(user=spotify_username, playlist_id=playlist[1], tracks=custom_ids[off:off+100])
+                sp.user_playlist_add_tracks(user=spotify_user_id, playlist_id=playlist[1], tracks=custom_ids[off:off+100])
             break
     
     return redirect("main")
@@ -180,23 +204,52 @@ def remove_info():
     spotify_user_id = sp.me()['id']
     #Creating a connection cursor
     cursor = mysql.connection.cursor()
-    sql = """DELETE FROM users WHERE username = %s;"""
+    sql = """DELETE FROM user_songs WHERE user_id = %s;"""
     cursor.execute(sql, [spotify_user_id])
+    
     try:
         #Saving the Actions performed on the DB
         mysql.connection.commit()
         #Closing the cursor
         cursor.close()
     except:
-        print("Error in removing user info from users")
-        
+        print("Error in removing user info from users")   
+    session.clear()
     return redirect("main")
+
+# Generates the second half of the SQL statement for song parameters based on weather description
+def get_custom_playlist_sql(main_weather: str, description_weather: str, temp: int,
+                            user_pop_stats: list[float]) -> str:
+    """
+    list user_pop_stats :
+       [0] : tempo average
+       [1] : tempo std
+       [2] : energy average
+       [3] : energy std
+    """
     
-def get_custom_playlist_sql(main_weather: str, description_weather: str):
-    return "energy > 0.75"
-
-
-
+    tempo_lower = 0
+    tempo_upper = 9999
+    energy_lower = 0
+    energy_upper = 1
+    
+    tempo_avg = user_pop_stats[0]
+    tempo_std = user_pop_stats[1]
+    energy_avg = user_pop_stats[2]
+    energy_std = user_pop_stats[3]
+    
+    # Get tempo parameters based on temperature
+    if temp <= 272:
+        tempo_upper = tempo_avg - tempo_std
+    elif temp >= 300:
+        tempo_lower = tempo_avg + tempo_std
+    else:
+        tempo_lower_int = tempo_avg - tempo_std
+        tempo_cent = (tempo_std * (300 - temp) / 14)  + tempo_lower_int
+        tempo_lower = tempo_cent - 0.5*tempo_std
+        tempo_upper = tempo_cent + 0.5*tempo_std
+      
+    return "tempo >= {0} AND tempo <= {1}".format(tempo_lower, tempo_upper)
 
 # Checks to see if token is valid and gets a new token if not
 def get_token(session):
@@ -217,11 +270,8 @@ def get_token(session):
         # Don't reuse a SpotifyOAuth object because they store token info and you could leak user tokens if you reuse a SpotifyOAuth object
         sp_oauth = spotipy.oauth2.SpotifyOAuth(client_id = creds.SPOTIFY_ID, client_secret = creds.SPOTIFY_SECRET, redirect_uri = REDIRECT_URI, scope = SCOPE)
         token_info = sp_oauth.refresh_access_token(session.get('token_info').get('refresh_token'))
-
     token_valid = True
     return token_info, token_valid
-
-
 
 if __name__ == "__main__":
     app.run(port=1000, debug=True)
