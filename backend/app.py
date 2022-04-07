@@ -28,7 +28,6 @@ if not os.path.exists('./.flask_session/'):
     os.makedirs('./.flask_session/')
 app.config['SESSION_FILE_DIR'] = './.flask_session/'
 
-
 mysql = MySQL(app)
 app.secret_key = creds.APP_SECRET
 API_BASE = 'https://accounts.spotify.com'
@@ -49,7 +48,6 @@ def session_cache_path():
     print("Session Cache Path: ", session_cache_path_string)
     return session_cache_path_string
 
-
 @app.route("/")
 def index():
     print("----------------------------INDEX---------------------------------------------------")
@@ -65,33 +63,23 @@ def index():
     cache_handler = spotipy.cache_handler.CacheFileHandler(cache_path=session_cache_path())
     sp_oauth = spotipy.oauth2.SpotifyOAuth(client_id = creds.SPOTIFY_ID, client_secret = creds.SPOTIFY_SECRET, redirect_uri = REDIRECT_URI, scope = SCOPE, cache_handler=cache_handler, show_dialog=True)
     
-   
-
     if request.args.get("code"):
         # Step 3. Being redirected from Spotify auth page
         sp_oauth.get_access_token(request.args.get("code"))
         # Step 4. Signed in, display data
         return redirect("/")
-    
-
 
     if not sp_oauth.validate_token(cache_handler.get_cached_token()):
         # Step 2. Display sign in link when no token
         auth_url = sp_oauth.get_authorize_url()
         print("sign in at : ", auth_url)
-    
     else:
         sp = spotipy.Spotify(auth_manager=sp_oauth)
         print("Signed in with id: ", sp.me()['id'])
-    
-
-
     print("----------------------------END OF INDEX---------------------------------------------")
     return render_template('example.html', value=wa.get_5_days())
 
 @app.route("/get_weather_data/<city_string>", methods = ['GET'])
-
-
 def get_weather_data(city_string):
     print("----------------------------GET WEATHER DATA--------------------------------")
     try:
@@ -143,8 +131,7 @@ def go():
     data = request.form
     weather_main = ""
     weather_description = ""
-    temperature = 290 # in kelvin
-    
+    temperature = 300 # in kelvin
     
     # Check if user is in system
     in_system = False
@@ -176,16 +163,15 @@ def go():
             feats = sp.audio_features(new_ids)
             songs_to_add.extend([tuple([cur_tracks[x]['id'], cur_tracks[x]['name'], cur_tracks[x]['album']['artists'][0]['name'], 
                                 feats[x]['energy'], feats[x]['tempo'], feats[x]['danceability'], feats[x]['loudness'],
-                                feats[x]['valence'], feats[x]['speechiness'], feats[x]['liveness'], 
-                                feats[x]['instrumentalness'], feats[x]['duration_ms'], feats[x]['key']]) for x in range(len(cur_tracks))])
+                                feats[x]['valence'], feats[x]['speechiness'], feats[x]['instrumentalness']]) for x in range(len(cur_tracks))])
             if len(response['items']) < 50:
                 break
         
         #Creating a connection cursor
         cursor = mysql.connection.cursor()
         sql = """INSERT IGNORE INTO song_stats 
-        (song_id,name,artist,energy,tempo,danceability,loudness,valence,speechiness,liveness,instrumentalness,duration_ms,song_key)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);"""
+        (song_id,name,artist,energy,tempo,danceability,loudness,valence,speechiness,instrumentalness)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);"""
         cursor.executemany(sql, songs_to_add)
         sql2 = "INSERT IGNORE INTO user_songs (song_id,user_id) VALUES (%s, %s);"
         cursor.executemany(sql2, [[x, spotify_user_id] for x in tracks])
@@ -206,21 +192,24 @@ def go():
     
     # Get user liked songs population statistics
     get_stats_sql = """SELECT AVG(tempo) AS tempo_avg, STD(tempo) AS tempo_std, 
-        AVG(energy) as energy_avg, STD(energy) as energy_std FROM song_stats WHERE song_id IN (SELECT song_id FROM user_songs WHERE user_id = %s);"""
+        AVG(energy) as energy_avg, STD(energy) as energy_std, 
+        AVG(valence) AS AVG_VALENCE, STD(valence) AS STD_VALENCE 
+        FROM song_stats 
+        WHERE song_id IN (SELECT song_id FROM user_songs WHERE user_id = %s);"""
     cursor.execute(get_stats_sql, [spotify_user_id])
     row = cursor.fetchone()
-    print("----------------", row, "-------------------")
+    print("Collected Stats: ", row)
     if not (row == None or len(row) == 0 or row[0] == None):
         user_pop_stats = [round(float(x),3) for x in row]
     else:
         print("Error in getting songs of user, returned no songs")
-        return redirect("main")
+        return redirect("/")
     
     # Execute sql to get custom playlist
     custom_sql_left = "SELECT song_id FROM song_stats WHERE song_id IN (SELECT song_id FROM user_songs WHERE user_id = %s) AND "
     custom_sql = custom_sql_left + get_custom_playlist_sql(main_weather=weather_main, 
-                                                           description_weather=weather_description, temp=temperature, 
-                                                           user_pop_stats=user_pop_stats) + ";"
+                                                            description_weather=weather_description, temp=temperature, 
+                                                            user_pop_stats=user_pop_stats) + ";"
     cursor.execute(custom_sql, [spotify_user_id])
     custom_ids = [x[0] for x in cursor.fetchall()]
     try:
@@ -267,6 +256,8 @@ def remove_info():
     spotify_user_id = sp.me()['id']
     #Creating a connection cursor
     cursor = mysql.connection.cursor()
+    sql = """DELETE FROM user_dates WHERE user_id = %s;"""
+    cursor.execute(sql, [spotify_user_id])
     sql = """DELETE FROM user_songs WHERE user_id = %s;"""
     cursor.execute(sql, [spotify_user_id])
     
@@ -294,8 +285,9 @@ def get_custom_playlist_sql(main_weather: str, description_weather: str, temp: i
        [1] : tempo std
        [2] : energy average
        [3] : energy std
+       [4] : valence average
+       [5] : valence std
     """
-    
     tempo_lower = 0
     tempo_upper = 9999
     energy_lower = 0
