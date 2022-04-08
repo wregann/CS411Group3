@@ -200,7 +200,15 @@ def go():
     user_dates_sql = "INSERT IGNORE INTO user_dates (user_id, datetime_accessed) VALUES(%s, now()) ON DUPLICATE KEY UPDATE datetime_accessed=now()"
     print(spotify_user_id)
     cursor.execute(user_dates_sql, [spotify_user_id])
-    
+    try:
+        #Saving the Actions performed on the DB
+        mysql.connection.commit()
+        #Closing the cursor
+        cursor.close()
+    except:
+        print("Errpr in commiting")
+        return redirect("/")
+    cursor = mysql.connection.cursor()
     # Get user liked songs population statistics
     get_stats_sql = """SELECT AVG(tempo) AS tempo_avg, STD(tempo) AS tempo_std, 
         AVG(energy) as energy_avg, STD(energy) as energy_std, 
@@ -295,10 +303,10 @@ def get_custom_playlist_sql(main_weather: str, description_weather: str, temp: i
     energy_lower = 0
     energy_upper = 1
     
-    tempo_avg = user_pop_stats[0]
-    tempo_std = user_pop_stats[1]
-    energy_avg = user_pop_stats[2]
-    energy_std = user_pop_stats[3]
+    tempo_avg = user_pop_stats['tempo_avg']
+    tempo_std = user_pop_stats['tempo_std']
+    # energy_avg = user_pop_stats[2]
+    # energy_std = user_pop_stats[3]
     
     # Get tempo parameters based on temperature
     if temp <= 272:
@@ -326,7 +334,7 @@ def current_user():
     cur_id = spotify.me()['id']
     print("Current User: ", cur_id)
     print("----------------------END OF CURRENT USER--------------------------------")
-    response_dict = {"User" : cur_id}
+    response_dict = {"Status" : cur_id}
     return response_dict
 
 if __name__ == "__main__":
