@@ -207,7 +207,9 @@ def go():
         cursor.close()
     except:
         print("Errpr in commiting")
-        return redirect("/")
+        response_dict["Error"] = "Error in commiting new user update time"
+        return response_dict
+    
     cursor = mysql.connection.cursor()
     # Get user liked songs population statistics
     get_stats_sql = """SELECT AVG(tempo) AS tempo_avg, STD(tempo) AS tempo_std, 
@@ -223,7 +225,8 @@ def go():
         print("Collected Stats: ", user_pop_stats)
     else:
         print("Error in getting songs of user, returned no songs")
-        return redirect("/")
+        response_dict["Error"] = "Error in getting liked songs statistics"
+        return response_dict
     
     # Execute sql to get custom playlist
     custom_sql_left = "SELECT song_id FROM song_stats WHERE song_id IN (SELECT song_id FROM user_songs WHERE user_id = %s) AND "
