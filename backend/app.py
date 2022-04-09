@@ -13,7 +13,13 @@ import json
 import os
 from flask_mysqldb import MySQL
 import uuid
+from marshmallow import Schema, fields, ValidationError
 
+class GoSchema(Schema):
+    main = fields.String(required=True)
+    description = fields.String(required=True)
+    temperature = fields.Integer(required=True)
+    
 app = Flask(__name__, template_folder="../templates")
 
 app.config['MYSQL_HOST'] = creds.DB_HOSTNAME
@@ -118,22 +124,39 @@ def verify():
 # Spotify returns requested data
 @app.route("/go", methods=['POST', 'GET'])
 def go():
-    response_dict = {"Status": "Failure", "Name" : "", "Error" : ""}
     print("----------------------------GO--------------------------------")
     print("Current uuid: ", session.get('uuid'))
+    response_dict = {"Status": "Failure", "Name" : "", "Error" : ""}
+    request_form = request.form
+    schema = GoSchema()
+    try:
+        # Validate request body against schema data types
+        result = schema.load(request_form)
+        print("Result Type: ", type(result))
+        data = json.load(json.dumps(result))
+        weather_main = data['main']
+        weather_description = data['description']
+        temperature = data['temperature']
+    except ValidationError as err:
+        weather_main = ""
+        weather_description = ""
+        temperature = 300 # in kelvin
+        # Return a nice message if validation fails
+        # response_dict['Error'] = "Post Json Incorrect Format"
+        # return response_dict
+    
     cache_handler = spotipy.cache_handler.CacheFileHandler(cache_path=session_cache_path())
     sp_oauth = spotipy.oauth2.SpotifyOAuth(client_id = creds.SPOTIFY_ID, client_secret = creds.SPOTIFY_SECRET, redirect_uri = REDIRECT_URI, scope = SCOPE, cache_handler=cache_handler)
     if not sp_oauth.validate_token(cache_handler.get_cached_token()):
         response_dict['Error'] = "Error in getting valid token, sent back"
         return response_dict
 
-    sp = spotipy.Spotify(auth_manager=sp_oauth)
+    sp = spotipy.Spotify(auth_manager=
+                         
+                         sp_oauth)
     spotify_user_id = sp.me()['id']
     # Get weather data from form
-    data = request.form
-    weather_main = ""
-    weather_description = ""
-    temperature = 300 # in kelvin
+    
     
     # Check if user is in system
     in_system = False
