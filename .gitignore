@@ -1,0 +1,4 @@
+backend/creds.py
+backend/.spotify_caches
+.flask_session/
+.spotify_caches/
