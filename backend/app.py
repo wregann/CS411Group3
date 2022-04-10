@@ -131,15 +131,18 @@ def go():
     try:
         # Validate request body against schema data types
         result = schema.load(request_form)
-        print("Result Type: ", type(result))
         data = json.load(json.dumps(result))
+
+        # Get parameters from request
         weather_main = data['main']
         weather_description = data['description']
         temperature = data['temperature']
     except ValidationError as err:
-        weather_main = ""
-        weather_description = ""
-        temperature = 300 # in kelvin
+        # For now, set default values to parameters
+        # Change values here for testing without frontend
+        weather_main = "Drizzle"
+        weather_description = "drizzle"
+        temperature = 278 # in kelvin
         # Return a nice message if validation fails
         # response_dict['Error'] = "Post Json Incorrect Format"
         # return response_dict
@@ -150,12 +153,8 @@ def go():
         response_dict['Error'] = "Error in getting valid token, sent back"
         return response_dict
 
-    sp = spotipy.Spotify(auth_manager=
-                         
-                         sp_oauth)
+    sp = spotipy.Spotify(auth_manager=sp_oauth)
     spotify_user_id = sp.me()['id']
-    # Get weather data from form
-    
     
     # Check if user is in system
     in_system = False
@@ -259,7 +258,7 @@ def go():
     custom_ids = [x[0] for x in cursor.fetchall()]
     cursor.close()
     
-    playlist_name = "Weatherify Test Playlist (Temp={0}) (Weather={1})".format(temperature, weather_description)
+    playlist_name = "Weatherify Test Playlist (Temp={0}) (Main={1}) (Desc={2})".format(temperature, weather_main, weather_description)
     playlists = [p['name'] for p in sp.user_playlists(user=spotify_user_id)['items']]
     if playlist_name not in playlists:
         sp.user_playlist_create(user=spotify_user_id, name=playlist_name)
@@ -323,6 +322,7 @@ def get_custom_playlist_sql(main_weather: str, description_weather: str, temp: i
     """
     dict user_pop_stats : tempo_avg, tempo_std, energy_avg, energy_std, valence_avg, valence_std
     """
+    # Set default values (will get all songs)
     tempo_lower = 0
     tempo_upper = 9999
     energy_lower = 0
@@ -330,7 +330,7 @@ def get_custom_playlist_sql(main_weather: str, description_weather: str, temp: i
     valence_lower = 0
     valence_upper = 1
     
-    
+    # Get statistics from sent dictionary
     tempo_avg = user_pop_stats['tempo_avg']
     tempo_std = user_pop_stats['tempo_std']
     energy_avg = user_pop_stats['energy_avg']
@@ -350,24 +350,26 @@ def get_custom_playlist_sql(main_weather: str, description_weather: str, temp: i
         tempo_upper = tempo_cent + 0.5*tempo_std
     
     tempo_str = "tempo >= {0} AND tempo <= {1}".format(tempo_lower, tempo_upper)
-    
+
     # Get energy and valence parameters based on weather
     # Not so great outside weather
     if main_weather in ["Drizzle", "Haze", "Fog", "Dust", "Mist"] or description_weather in ["light rain", "moderate rain", "light snow", "Snow", "Sleet", "overcast clouds: 85-100%"]:
-        energy_lower = energy_avg - energy_std * 0.43
-        
-        pass
+        energy_lower = energy_avg - energy_std
+        energy_upper = energy_avg
+        valence_upper = valence_avg
+        valence_lower = valence_avg - valence_std
         
     # Stormy!!!
     elif main_weather in ["Thunderstorm", "Rain", "Snow", "Squall", "Sand", "Ash"]:
-        pass
+        energy_upper = energy_avg - energy_std * 0.5
+        valence_upper = valence_avg - 0.4*valence_std
     
     # Regular
     else:
-        pass
-    
-      
-    return tempo_str
+        energy_lower = energy_avg
+        valence_lower = valence_avg
+
+    return tempo_str + " AND energy >= {0} AND energy <= {1} AND valence >= {2} AND valence <= {3}".format(energy_lower, energy_upper, valence_lower, valence_upper)
 
 # For testing multiple users
 @app.route('/current_user')
