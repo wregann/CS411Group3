@@ -1,11 +1,10 @@
 from multiprocessing import AuthenticationError
 from multiprocessing.sharedctypes import Value
-from pickle import NONE
 import weather_access as wa
 import creds
 from flask import Flask, render_template, redirect, request, session, make_response,session,redirect
 from flask_restful import Api, Resource, reqparse
-from flask_cors import CORS #comment this on deployment
+from flask_cors import CORS
 from flask_session import Session
 import time
 import spotipy
@@ -328,11 +327,16 @@ def get_custom_playlist_sql(main_weather: str, description_weather: str, temp: i
     tempo_upper = 9999
     energy_lower = 0
     energy_upper = 1
+    valence_lower = 0
+    valence_upper = 1
+    
     
     tempo_avg = user_pop_stats['tempo_avg']
     tempo_std = user_pop_stats['tempo_std']
-    # energy_avg = user_pop_stats[2]
-    # energy_std = user_pop_stats[3]
+    energy_avg = user_pop_stats['energy_avg']
+    energy_std = user_pop_stats['energy_std']
+    valence_avg = user_pop_stats['valence_avg']
+    valence_std = user_pop_stats['valence_std']
     
     # Get tempo parameters based on temperature
     if temp <= 272:
@@ -344,8 +348,26 @@ def get_custom_playlist_sql(main_weather: str, description_weather: str, temp: i
         tempo_cent = (tempo_std * (300 - temp) / 14)  + tempo_lower_int
         tempo_lower = tempo_cent - 0.5*tempo_std
         tempo_upper = tempo_cent + 0.5*tempo_std
+    
+    tempo_str = "tempo >= {0} AND tempo <= {1}".format(tempo_lower, tempo_upper)
+    
+    # Get energy and valence parameters based on weather
+    # Not so great outside weather
+    if main_weather in ["Drizzle", "Haze", "Fog", "Dust", "Mist"] or description_weather in ["light rain", "moderate rain", "light snow", "Snow", "Sleet", "overcast clouds: 85-100%"]:
+        energy_lower = energy_avg - energy_std * 0.43
+        
+        pass
+        
+    # Stormy!!!
+    elif main_weather in ["Thunderstorm", "Rain", "Snow", "Squall", "Sand", "Ash"]:
+        pass
+    
+    # Regular
+    else:
+        pass
+    
       
-    return "tempo >= {0} AND tempo <= {1}".format(tempo_lower, tempo_upper)
+    return tempo_str
 
 # For testing multiple users
 @app.route('/current_user')
