@@ -36,7 +36,7 @@ app.config['SESSION_FILE_DIR'] = './.flask_session/'
 mysql = MySQL(app)
 app.secret_key = creds.APP_SECRET
 API_BASE = 'https://accounts.spotify.com'
-REDIRECT_URI = "http://127.0.0.1:1000/"
+REDIRECT_URI = "http://127.0.0.1:3000/"
 SCOPE = 'playlist-modify-private,playlist-modify-public,ugc-image-upload,user-library-read'
 
 Session(app)
@@ -56,6 +56,7 @@ def session_cache_path():
 @app.route("/")
 def index():
     print("----------------------------INDEX---------------------------------------------------")
+    response = {"logged" : False, "auth_url" : "", "id" : ""}
     if session.get('uuid', None) == None:
         # Step 1. Visitor is unknown, give random ID
         print("Making User uuid")
@@ -72,17 +73,30 @@ def index():
         # Step 3. Being redirected from Spotify auth page
         sp_oauth.get_access_token(request.args.get("code"))
         # Step 4. Signed in, display data
-        return redirect("/")
+        response['logged'] = True
+        sp = spotipy.Spotify(auth_manager=sp_oauth)
+        print("Signed in with id: ", sp.me()['id'])
+        response['id'] = sp.me()['id']
+        return response
 
     if not sp_oauth.validate_token(cache_handler.get_cached_token()):
         # Step 2. Display sign in link when no token
         auth_url = sp_oauth.get_authorize_url()
         print("sign in at : ", auth_url)
+        response['logged'] = False
+        response['auth_url'] = auth_url
+        print("----------------------------END OF INDEX---------------------------------------------")
+        return response
     else:
         sp = spotipy.Spotify(auth_manager=sp_oauth)
         print("Signed in with id: ", sp.me()['id'])
-    print("----------------------------END OF INDEX---------------------------------------------")
-    return render_template('example.html', value=wa.get_5_days())
+        response['logged'] = True
+        response['id'] = sp.me()['id']
+        print("----------------------------END OF INDEX---------------------------------------------")
+        return response
+    
+    #return render_template('example.html', value=wa.get_5_days())
+
 
 @app.route("/get_weather_data/<city_string>", methods = ['GET'])
 def get_weather_data(city_string):
@@ -386,6 +400,15 @@ def current_user():
     print("----------------------END OF CURRENT USER--------------------------------")
     response_dict = {"Status" : cur_id}
     return response_dict
+
+# For testing multiple users
+@app.route('/get_5_days')
+def get_days():
+    print("----------------------Start Get 5 Days--------------------------------")
+    response = {"days": wa.get_5_days()}
+    print("----------------------End Get 5 Days--------------------------------")
+    return response
+    
 
 if __name__ == "__main__":
     app.run(port=1000, debug=True)
