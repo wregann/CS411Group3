@@ -302,6 +302,7 @@ def remove_info():
         sp_oauth = spotipy.oauth2.SpotifyOAuth(client_id = creds.SPOTIFY_ID, client_secret = creds.SPOTIFY_SECRET, redirect_uri = REDIRECT_URI, scope = SCOPE, cache_handler=cache_handler)
     except TypeError as e:
         session.clear()
+        print("could not find session cache path on logout")
         response['logged_out'] = True
         return response
     if not sp_oauth.validate_token(cache_handler.get_cached_token()):
@@ -315,15 +316,21 @@ def remove_info():
         except TypeError as e:
             session.clear()
         response['logged_out'] = True
+        print("---------------------------------------------END OF OUT--------------------------------")
         return response
-
     sp = spotipy.Spotify(auth_manager=sp_oauth)
 
     spotify_user_id = sp.me()['id']
+    print(spotify_user_id)
     #Creating a connection cursor
     cursor = mysql.connection.cursor()
     sql = """DELETE FROM user_dates WHERE user_id = %s;"""
     cursor.execute(sql, [spotify_user_id])
+    try:
+        #Saving the Actions performed on the DB
+        mysql.connection.commit()
+    except:
+        print("error in removing user from user_dates")
     sql = """DELETE FROM user_songs WHERE user_id = %s;"""
     cursor.execute(sql, [spotify_user_id])
     
@@ -339,9 +346,9 @@ def remove_info():
         session.clear()
     except OSError as e:
         print ("Error: %s - %s." % (e.filename, e.strerror))
-        print("---------------------------------------------END OF OUT--------------------------------")
         
     response['logged_out'] = True
+    print("---------------------------------------------END OF OUT--------------------------------")
     return response
 
 

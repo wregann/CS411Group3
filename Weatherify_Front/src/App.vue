@@ -19,7 +19,7 @@
     <div v-if="logged" id="City_Input">
       <form v-on:submit.prevent="submit_city">
         <input type="text" placeholder="Input Closest City Here" v-model="city_string"/>
-        <button @click="submit_city()">Submit City</button>
+        <button type="submit">Submit City</button>
       </form>
       <p>City Found: {{city_found}}</p>
       <p>Latitude: {{lat}}, Longitude: {{long}}</p>
@@ -27,6 +27,11 @@
 
     <!-- Main Creator Portion -->
     <div id="creator" v-if="logged && city_found">
+      <select v-model="time_select">
+        <option value="day">Day</option>
+        <option value="eve">Eve</option>
+        <option value="night">Night</option>
+      </select>
       <form v-on:submit.prevent="submit_weather">
         <table border="1" class="center">
           <thead>
@@ -39,38 +44,41 @@
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td> {{day_mains[0]}} <br> {{day_descs[0]}} <br> {{day_temps[0]}} <br> <input type="radio" name="DaySelect" v-model="selected_day" :value="0" /></td>
-              <td> {{day_mains[1]}} <br> {{day_descs[1]}} <br> {{day_temps[1]}} <br> <input type="radio" name="DaySelect" v-model="selected_day" :value="1"/></td>
-              <td> {{day_mains[2]}} <br> {{day_descs[2]}} <br> {{day_temps[2]}} <br> <input type="radio" name="DaySelect" v-model="selected_day" :value="2"/></td>
-              <td> {{day_mains[3]}} <br> {{day_descs[3]}} <br> {{day_temps[3]}} <br> <input type="radio" name="DaySelect" v-model="selected_day" :value="3"/></td>
-              <td> {{day_mains[4]}} <br> {{day_descs[4]}} <br> {{day_temps[4]}} <br> <input type="radio" name="DaySelect" v-model="selected_day" :value="4"/></td>
+            <tr v-if="time_select == 'day'">
+              <td> {{cur_mains[0]}} <br> {{cur_descs[0]}} <br> {{cur_temps[0]}} <br> <input type="radio" name="DaySelect" v-model="selected_day" :value="0" /></td>
+              <td> {{cur_mains[1]}} <br> {{cur_descs[1]}} <br> {{cur_temps[1]}} <br> <input type="radio" name="DaySelect" v-model="selected_day" :value="1"/></td>
+              <td> {{cur_mains[2]}} <br> {{cur_descs[2]}} <br> {{cur_temps[2]}} <br> <input type="radio" name="DaySelect" v-model="selected_day" :value="2"/></td>
+              <td> {{cur_mains[3]}} <br> {{cur_descs[3]}} <br> {{cur_temps[3]}} <br> <input type="radio" name="DaySelect" v-model="selected_day" :value="3"/></td>
+              <td> {{cur_mains[4]}} <br> {{cur_descs[4]}} <br> {{cur_temps[4]}} <br> <input type="radio" name="DaySelect" v-model="selected_day" :value="4"/></td>
             </tr>
-          <!-- Evening Temps... Maybe Later
-          <tr>
-            <td>{{eve_mains[0]}} <br> {{eve_descs[0]}} <br> {{eve_temps[0]}} </td>
-            <td>{{eve_mains[1]}} <br> {{eve_descs[1]}} <br> {{eve_temps[1]}} </td>
-            <td>{{eve_mains[2]}} <br> {{eve_descs[2]}} <br> {{eve_temps[2]}} </td>
-            <td>{{eve_mains[3]}} <br> {{eve_descs[3]}} <br> {{eve_temps[3]}} </td>
-            <td>{{eve_mains[4]}} <br> {{eve_descs[4]}} <br> {{eve_temps[4]}} </td>
-          </tr>
-          -->
+            <tr v-if="time_select == 'eve'">
+              <td>{{cur_mains[0]}} <br> {{cur_descs[0]}} <br> {{cur_temps[5]}} <br> <input type="radio" name="DaySelect" v-model="selected_day" :value="5" /></td>
+              <td>{{cur_mains[1]}} <br> {{cur_descs[1]}} <br> {{cur_temps[6]}} <br> <input type="radio" name="DaySelect" v-model="selected_day" :value="6"/></td>
+              <td>{{cur_mains[2]}} <br> {{cur_descs[2]}} <br> {{cur_temps[7]}} <br> <input type="radio" name="DaySelect" v-model="selected_day" :value="7"/></td>
+              <td>{{cur_mains[3]}} <br> {{cur_descs[3]}} <br> {{cur_temps[8]}} <br> <input type="radio" name="DaySelect" v-model="selected_day" :value="8"/></td>
+              <td>{{cur_mains[4]}} <br> {{cur_descs[4]}} <br> {{cur_temps[9]}} <br> <input type="radio" name="DaySelect" v-model="selected_day" :value="9"/></td>
+            </tr>
+            <tr v-if="time_select == 'night'">
+              <td>{{cur_mains[0]}} <br> {{cur_descs[0]}} <br> {{cur_temps[10]}} <br> <input type="radio" name="DaySelect" v-model="selected_day" :value="10" /></td>
+              <td>{{cur_mains[1]}} <br> {{cur_descs[1]}} <br> {{cur_temps[11]}} <br> <input type="radio" name="DaySelect" v-model="selected_day" :value="11"/></td>
+              <td>{{cur_mains[2]}} <br> {{cur_descs[2]}} <br> {{cur_temps[12]}} <br> <input type="radio" name="DaySelect" v-model="selected_day" :value="12"/></td>
+              <td>{{cur_mains[3]}} <br> {{cur_descs[3]}} <br> {{cur_temps[13]}} <br> <input type="radio" name="DaySelect" v-model="selected_day" :value="13"/></td>
+              <td>{{cur_mains[4]}} <br> {{cur_descs[4]}} <br> {{cur_temps[14]}} <br> <input type="radio" name="DaySelect" v-model="selected_day" :value="14"/></td>
+            </tr>
+         
           </tbody>
         </table>
         <button>Submit Weather To Make Playlist!</button>
       </form>
     </div>
-    <p v-if="city_found">Created: {{playlist_created}}</p>
-    <p v-if="city_found">Playlist Name: {{playlist_name}}</p>
-    <p v-if="city_found">Created At: {{created_when}}</p>
+    <p v-if="city_found && logged">Created: {{playlist_created}}</p>
+    <p v-if="city_found && logged">Playlist Name: {{playlist_name}}</p>
+    <p v-if="city_found && logged">Created At: {{created_when}}</p>
   </div>
 </template>
 
 <script>
 import axios from 'axios';
-import { useRouter, useRoute } from 'vue-router';
-import {computed, watch} from 'vue'
-
 
 export default {
   el: '#app',
@@ -85,16 +93,15 @@ export default {
         city_found: false,
         lat: 0,
         long: 0,
-        day_mains: ["", "", "", "", ""],
-        day_descs: ["", "", "", "", ""],
-        day_temps: [0,0,0,0,0],
-        eve_mains: ["", "", "", "", ""],
-        eve_descs: ["", "", "", "", ""],
-        eve_temps: [0,0,0,0,0],
         selected_day: null,
         playlist_created: false,
         playlist_name: "",
-        created_when: null
+        created_when: null,
+        time_select: "day",
+        cur_mains: ["", "", "", "", ""],
+        cur_descs: ["", "", "", "", ""],
+        cur_temps: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+
       }
     },
     mounted() {
@@ -113,27 +120,29 @@ export default {
       },
       logout(){
         try{
-          axios.get('http://127.0.0.1:1000/api/out').then(response => {console.log(response); this.logged = false; this.auth_url = null; this.user_id = null})
-          this.$router.push('/')
+          axios.get('http://127.0.0.1:1000/api/out').then(response => 
+          {console.log(response); this.logged = false; this.auth_url = null; this.user_id = null;
+          this.created_when = null; this.city_found = false; this.playlist_created = false; this.playlist_name = ""; this.$router.push('/'); 
           axios.get('http://127.0.0.1:1000/api/').then(response => {this.logged = response.data.logged; this.user_id = response.data.user_id; this.auth_url = response.data.auth_url})       
-
+          })
         }
         catch(err){
           console.log(err)
         }
       },
       submit_city() {
-        this.$emit('submit', this.city_string)
         try{
-          //console.log('http://127.0.0.1:1000/api/get_weather_data/' + this.city_string)
+          console.log('http://127.0.0.1:1000/api/get_weather_data/' + this.city_string)
           axios.get('http://127.0.0.1:1000/api/get_weather_data/' + this.city_string).then(response => {console.log(response); this.lat = response.data.lat; this.long = response.data.lon; this.city_found = (this.lat) ? true : false;
           if (this.city_found) {
             for (let i = 0; i < 5; i++) {
-              this.day_mains[i] = response.data.daily[i].weather[0].main
-              this.day_descs[i] = response.data.daily[i].weather[0].description
-              this.day_temps[i] = response.data.daily[i].feels_like.day
+              this.cur_mains[i] = response.data.daily[i].weather[0].main
+              this.cur_descs[i] = response.data.daily[i].weather[0].description
+              this.cur_temps[i] = response.data.daily[i].feels_like.day
+              this.cur_temps[i + 5] = response.data.daily[i].feels_like.eve
+              this.cur_temps[i + 10] = response.data.daily[i].feels_like.night
             }
-          }
+          };
           })
         }
         catch(err){
@@ -143,36 +152,18 @@ export default {
       submit_weather() {
         console.log(this.selected_day)
         try {
-          if (this.selected_day >= 0 && this.selected_day <= 4){
+          if (this.selected_day >= 0 && this.selected_day <= 14){
             axios.post('http://127.0.0.1:1000/api/go', {withCredentials : true,
-                      main: this.day_mains[this.selected_day],
-                      description: this.day_descs[this.selected_day],
-                      temperature: this.day_temps[this.selected_day]
+                      main: this.cur_mains[this.selected_day % 5],
+                      description: this.cur_descs[this.selected_day % 5],
+                      temperature: this.cur_temps[this.selected_day]
                     }).then(response => {this.playlist_created = response.data.Created; this.playlist_name = response.data.Name; this.created_when = response.data.when})
           }
-          
         }
         catch(err) {
           console.log(err)
         }
       }
-    },
-    setup() {
-      // const router = useRouter()
-      // router.isReady()
-      // const route = useRoute()
-      
-      // const searchQuery = computed(() => route.query.code)
-
-      // let user_code = null
-      
-      // watch(searchQuery, newSearchQuery => {console.log(newSearchQuery); user_code = newSearchQuery})
-  
-      // return {
-      //   user_code
-      // }
-      
-      
     }
 }
 </script>
@@ -181,7 +172,6 @@ export default {
 #app {
   text-align: center;
   color: #2c3e50;
-  margin-top: 40px;
 }
 .image {
       height: 500px;
