@@ -4,15 +4,15 @@ import weather_access as wa
 import creds
 from flask import Flask, render_template, redirect, request, session, make_response,session,redirect
 from flask_restful import Api, Resource, reqparse
-from flask_cors import CORS
+from flask_cors import CORS, cross_origin
 from flask_session import Session
-import time
 import spotipy
-import json
+import arrow
 import os
 from flask_mysqldb import MySQL
 import uuid
 from marshmallow import Schema, fields, ValidationError
+from urllib.parse import urlencode
 
 class GoSchema(Schema):
     main = fields.String(required=True)
@@ -25,9 +25,9 @@ app.config['MYSQL_HOST'] = creds.DB_HOSTNAME
 app.config['MYSQL_USER'] = creds.DB_USERNAME
 app.config['MYSQL_PASSWORD'] = creds.DB_PASSWORD
 app.config['MYSQL_DB'] = "WeatherifyDB"
-app.config['SECRET_KEY'] = os.urandom(64)
+app.config['SECRET_KEY'] = creds.APP_SECRET
 app.config['SESSION_TYPE'] = 'filesystem'
-
+app.config.update(SESSION_COOKIE_SAMESITE="None", SESSION_COOKIE_SECURE=True)
 # Set flask session cache directory, make it if it isnt there
 if not os.path.exists('./.flask_session/'):
     os.makedirs('./.flask_session/')
@@ -36,11 +36,14 @@ app.config['SESSION_FILE_DIR'] = './.flask_session/'
 mysql = MySQL(app)
 app.secret_key = creds.APP_SECRET
 API_BASE = 'https://accounts.spotify.com'
-REDIRECT_URI = "http://127.0.0.1:3000/"
+REDIRECT_URI = "http://127.0.0.1:1000/api/"
 SCOPE = 'playlist-modify-private,playlist-modify-public,ugc-image-upload,user-library-read'
 
 Session(app)
+
+
 CORS(app, supports_credentials=True)
+app.config['CORS_HEADERS'] = ['Content-Type', 'Authorization']
 
 caches_folder = './.spotify_caches/'
 if not os.path.exists(caches_folder):
@@ -53,10 +56,12 @@ def session_cache_path():
     print("Session Cache Path: ", session_cache_path_string)
     return session_cache_path_string
 
-@app.route("/")
+@app.route("/api/", methods=['GET', 'POST'])
+@cross_origin(methods=['GET', 'POST'], supports_credentials=True, headers=['Content-Type', 'Authorization'], origin='http://127.0.0.1:3000')
 def index():
     print("----------------------------INDEX---------------------------------------------------")
-    response = {"logged" : False, "auth_url" : "", "id" : ""}
+    response = {"logged": False, "user_id": None, "auth_url": None}
+            
     if session.get('uuid', None) == None:
         # Step 1. Visitor is unknown, give random ID
         print("Making User uuid")
@@ -70,14 +75,16 @@ def index():
     sp_oauth = spotipy.oauth2.SpotifyOAuth(client_id = creds.SPOTIFY_ID, client_secret = creds.SPOTIFY_SECRET, redirect_uri = REDIRECT_URI, scope = SCOPE, cache_handler=cache_handler, show_dialog=True)
     
     if request.args.get("code"):
+        print("Code Received")
         # Step 3. Being redirected from Spotify auth page
         sp_oauth.get_access_token(request.args.get("code"))
         # Step 4. Signed in, display data
         response['logged'] = True
         sp = spotipy.Spotify(auth_manager=sp_oauth)
         print("Signed in with id: ", sp.me()['id'])
-        response['id'] = sp.me()['id']
-        return response
+        response['user_id'] = sp.me()['id']
+        #return response 
+        return redirect("http://127.0.0.1:3000/", code=302)
 
     if not sp_oauth.validate_token(cache_handler.get_cached_token()):
         # Step 2. Display sign in link when no token
@@ -85,41 +92,38 @@ def index():
         print("sign in at : ", auth_url)
         response['logged'] = False
         response['auth_url'] = auth_url
-        print("----------------------------END OF INDEX---------------------------------------------")
-        return response
     else:
         sp = spotipy.Spotify(auth_manager=sp_oauth)
         print("Signed in with id: ", sp.me()['id'])
         response['logged'] = True
-        response['id'] = sp.me()['id']
-        print("----------------------------END OF INDEX---------------------------------------------")
-        return response
-    
-    #return render_template('example.html', value=wa.get_5_days())
+        response['user_id'] = sp.me()['id']
+    print("----------------------------END OF INDEX---------------------------------------------")
+    return response
 
 
-@app.route("/get_weather_data/<city_string>", methods = ['GET'])
+@app.route("/api/get_weather_data/<city_string>", methods = ['GET'])
 def get_weather_data(city_string):
+    response = {"lat": None, "lon": None}
     print("----------------------------GET WEATHER DATA--------------------------------")
     try:
         lat, lon = wa.get_lat_lon_from_input(key=creds.OPENWEATHER_KEY, city=city_string)
     except ValueError as e:
         print(e)
         print('Error: Could not get city longitude and latitude, please try again')
-        return redirect("/")
+        return response
     
     try:
         five_day_data_dict = wa.get_5_day_data(key=creds.OPENWEATHER_KEY, lat=lat, lon=lon)
     except ValueError as e:
         print(e)
         print('Error: could not get weather data from latitude and lognitude')
-        return redirect("/")
+        return response
     print("----------------------------END OF GET WEATHER DATA--------------------------------")
     return five_day_data_dict
 
 # authorization-code-flow Step 1. Have your application request authorization; 
 # the user logs in and authorizes access
-@app.route("/spotify_login")
+@app.route("/api/spotify_login")
 def verify():
     print("----------------------------SPOTIFY LOGIN VERIFY--------------------------------")
     # Don't reuse a SpotifyOAuth object because they store token info and you could leak user tokens if you reuse a SpotifyOAuth object
@@ -129,40 +133,37 @@ def verify():
     
     auth_url = sp_oauth.get_authorize_url()
     print("Going to auth_url")
+    print(session['uuid'])
     print("----------------------------END OF SPOTIFY LOGIN VERIFY--------------------------------")
     return redirect(auth_url)
 
 # authorization-code-flow Step 3.
 # Use the access token to access the Spotify Web API;
 # Spotify returns requested data
-@app.route("/go", methods=['POST', 'GET'])
+@app.route("/api/go", methods=['POST'])
+@cross_origin(methods=['POST'], supports_credentials=True, headers=['Content-Type', 'Authorization'], origin='http://127.0.0.1:3000')
 def go():
     print("----------------------------GO--------------------------------")
     print("Current uuid: ", session.get('uuid'))
-    response_dict = {"Status": "Failure", "Name" : "", "Error" : ""}
-    request_form = request.form
-    schema = GoSchema()
-    try:
-        # Validate request body against schema data types
-        result = schema.load(request_form)
-        data = json.load(json.dumps(result))
+    response_dict = {"Created": False, "Name" : "", "Error" : "", "when" : ""}
+    data = request.json
+    weather_main = data['main']
+    weather_description = data['description']
+    temperature = data['temperature']
 
-        # Get parameters from request
-        weather_main = data['main']
-        weather_description = data['description']
-        temperature = data['temperature']
-    except ValidationError as err:
-        # For now, set default values to parameters
-        # Change values here for testing without frontend
+    if weather_main == None or weather_description == None or temperature == None:
+        print("Your Post was probs missing some parameters")
         weather_main = "Drizzle"
         weather_description = "drizzle"
         temperature = 278 # in kelvin
-        # Return a nice message if validation fails
-        # response_dict['Error'] = "Post Json Incorrect Format"
-        # return response_dict
+
+    try:
+        cache_handler = spotipy.cache_handler.CacheFileHandler(cache_path=session_cache_path())
+        sp_oauth = spotipy.oauth2.SpotifyOAuth(client_id = creds.SPOTIFY_ID, client_secret = creds.SPOTIFY_SECRET, redirect_uri = REDIRECT_URI, scope = SCOPE, cache_handler=cache_handler)
+    except TypeError as e:
+        response['Error'] = "Error in getting session cache path"
+        return response
     
-    cache_handler = spotipy.cache_handler.CacheFileHandler(cache_path=session_cache_path())
-    sp_oauth = spotipy.oauth2.SpotifyOAuth(client_id = creds.SPOTIFY_ID, client_secret = creds.SPOTIFY_SECRET, redirect_uri = REDIRECT_URI, scope = SCOPE, cache_handler=cache_handler)
     if not sp_oauth.validate_token(cache_handler.get_cached_token()):
         response_dict['Error'] = "Error in getting valid token, sent back"
         return response_dict
@@ -241,7 +242,7 @@ def go():
         #Closing the cursor
         cursor.close()
     except:
-        print("Errpr in commiting")
+        print("Error in commiting")
         response_dict["Error"] = "Error in commiting new user update time"
         return response_dict
     
@@ -286,16 +287,23 @@ def go():
             break
     print("Playlist Created: ", playlist_name, " for ", spotify_user_id)
     print("----------------------------END OF GO---------------------------------------------")
-    response_dict["Status"] = "Success"
+    response_dict["Created"] = True
     response_dict["Name"] = playlist_name
+    response_dict['when'] = str(arrow.now().format('YYYY-MM-DD HH:mm:ss'))
     return response_dict
 
 # Get user information out of table
-@app.route("/out", methods=['GET'])
+@app.route("/api/out", methods=['GET'])
 def remove_info():
     print("---------------------------------------------OUT--------------------------------")
-    cache_handler = spotipy.cache_handler.CacheFileHandler(cache_path=session_cache_path())
-    sp_oauth = spotipy.oauth2.SpotifyOAuth(client_id = creds.SPOTIFY_ID, client_secret = creds.SPOTIFY_SECRET, redirect_uri = REDIRECT_URI, scope = SCOPE, cache_handler=cache_handler)
+    response = {"logged_out" : False}
+    try:
+        cache_handler = spotipy.cache_handler.CacheFileHandler(cache_path=session_cache_path())
+        sp_oauth = spotipy.oauth2.SpotifyOAuth(client_id = creds.SPOTIFY_ID, client_secret = creds.SPOTIFY_SECRET, redirect_uri = REDIRECT_URI, scope = SCOPE, cache_handler=cache_handler)
+    except TypeError as e:
+        session.clear()
+        response['logged_out'] = True
+        return response
     if not sp_oauth.validate_token(cache_handler.get_cached_token()):
         print("Spotify User not signed in, only clearing session data")
         try:
@@ -304,7 +312,11 @@ def remove_info():
         except OSError as e:
             print ("Error: %s - %s." % (e.filename, e.strerror))
             print("---------------------------------------------END OF OUT--------------------------------")
-        return redirect('/')
+        except TypeError as e:
+            session.clear()
+        response['logged_out'] = True
+        return response
+
     sp = spotipy.Spotify(auth_manager=sp_oauth)
 
     spotify_user_id = sp.me()['id']
@@ -328,7 +340,10 @@ def remove_info():
     except OSError as e:
         print ("Error: %s - %s." % (e.filename, e.strerror))
         print("---------------------------------------------END OF OUT--------------------------------")
-    return redirect("/")
+        
+    response['logged_out'] = True
+    return response
+
 
 # Generates the second half of the SQL statement for song parameters based on weather description
 def get_custom_playlist_sql(main_weather: str, description_weather: str, temp: int,
@@ -386,7 +401,7 @@ def get_custom_playlist_sql(main_weather: str, description_weather: str, temp: i
     return tempo_str + " AND energy >= {0} AND energy <= {1} AND valence >= {2} AND valence <= {3}".format(energy_lower, energy_upper, valence_lower, valence_upper)
 
 # For testing multiple users
-@app.route('/current_user')
+@app.route('/api/current_user')
 def current_user():
     print("----------------------CURRENT USER--------------------------------")
     cache_handler = spotipy.cache_handler.CacheFileHandler(cache_path=session_cache_path())
@@ -402,7 +417,7 @@ def current_user():
     return response_dict
 
 # For testing multiple users
-@app.route('/get_5_days')
+@app.route('/api/get_5_days')
 def get_days():
     print("----------------------Start Get 5 Days--------------------------------")
     response = {"days": wa.get_5_days()}
@@ -411,4 +426,4 @@ def get_days():
     
 
 if __name__ == "__main__":
-    app.run(port=1000, debug=True)
+    app.run(host='127.0.0.1', threaded=True, debug=True, port=1000)

@@ -10,24 +10,13 @@ VueElement.prototype.$http = axios
 const routes = [
     {
         path: '/',
-        name: "Home",
-        component: Home
+        name: 'Home',
+        component: Home,
     },
-    {
-        path: '/login',
-        name: "Login",
-        component: Login
-    },
-    {
-        path: '/search',
-        name: "Search",
-        component: Search
-    }
 ]
-
 const router = createRouter({
     history: createWebHistory(),
-    routes
+    routes,
 })
 
 createApp(App).use(router).mount('#app')
