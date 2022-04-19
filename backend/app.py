@@ -1,9 +1,6 @@
-from multiprocessing import AuthenticationError
-from multiprocessing.sharedctypes import Value
 import weather_access as wa
 import creds
-from flask import Flask, render_template, redirect, request, session, make_response,session,redirect
-from flask_restful import Api, Resource, reqparse
+from flask import Flask, redirect, request, session,session,redirect
 from flask_cors import CORS, cross_origin
 from flask_session import Session
 import spotipy
@@ -11,14 +8,7 @@ import arrow
 import os
 from flask_mysqldb import MySQL
 import uuid
-from marshmallow import Schema, fields, ValidationError
-from urllib.parse import urlencode
 
-class GoSchema(Schema):
-    main = fields.String(required=True)
-    description = fields.String(required=True)
-    temperature = fields.Integer(required=True)
-    
 app = Flask(__name__, template_folder="../templates")
 
 app.config['MYSQL_HOST'] = creds.DB_HOSTNAME
@@ -40,8 +30,6 @@ REDIRECT_URI = "http://127.0.0.1:1000/api/"
 SCOPE = 'playlist-modify-private,playlist-modify-public,ugc-image-upload,user-library-read'
 
 Session(app)
-
-
 CORS(app, supports_credentials=True)
 app.config['CORS_HEADERS'] = ['Content-Type', 'Authorization']
 
@@ -152,11 +140,10 @@ def go():
     temperature = data['temperature']
 
     if weather_main == None or weather_description == None or temperature == None:
-        print("Your Post was probs missing some parameters")
-        weather_main = "Drizzle"
-        weather_description = "drizzle"
-        temperature = 278 # in kelvin
-
+        print("Your post request was missing some required paramaters")
+        response["Error"] = "Your post request was missing some required paramaters"
+        return response
+    
     try:
         cache_handler = spotipy.cache_handler.CacheFileHandler(cache_path=session_cache_path())
         sp_oauth = spotipy.oauth2.SpotifyOAuth(client_id = creds.SPOTIFY_ID, client_secret = creds.SPOTIFY_SECRET, redirect_uri = REDIRECT_URI, scope = SCOPE, cache_handler=cache_handler)
@@ -407,23 +394,7 @@ def get_custom_playlist_sql(main_weather: str, description_weather: str, temp: i
 
     return tempo_str + " AND energy >= {0} AND energy <= {1} AND valence >= {2} AND valence <= {3}".format(energy_lower, energy_upper, valence_lower, valence_upper)
 
-# For testing multiple users
-@app.route('/api/current_user')
-def current_user():
-    print("----------------------CURRENT USER--------------------------------")
-    cache_handler = spotipy.cache_handler.CacheFileHandler(cache_path=session_cache_path())
-    auth_manager = spotipy.oauth2.SpotifyOAuth(client_id = creds.SPOTIFY_ID, client_secret = creds.SPOTIFY_SECRET, redirect_uri = REDIRECT_URI, scope = SCOPE, cache_handler=cache_handler)
-    if not auth_manager.validate_token(cache_handler.get_cached_token()):
-        print("failed to get current user")
-        return redirect('/')
-    spotify = spotipy.Spotify(auth_manager=auth_manager)
-    cur_id = spotify.me()['id']
-    print("Current User: ", cur_id)
-    print("----------------------END OF CURRENT USER--------------------------------")
-    response_dict = {"Status" : cur_id}
-    return response_dict
-
-# For testing multiple users
+# Gets next five days to display on table during program start up
 @app.route('/api/get_5_days')
 def get_days():
     print("----------------------Start Get 5 Days--------------------------------")
