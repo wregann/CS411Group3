@@ -9,8 +9,10 @@ import os
 from flask_mysqldb import MySQL
 import uuid
 
-app = Flask(__name__, template_folder="../templates")
+# Create Flask App
+app = Flask(__name__)
 
+# Set backend configuration variables
 app.config['MYSQL_HOST'] = creds.DB_HOSTNAME
 app.config['MYSQL_USER'] = creds.DB_USERNAME
 app.config['MYSQL_PASSWORD'] = creds.DB_PASSWORD
@@ -18,25 +20,30 @@ app.config['MYSQL_DB'] = "WeatherifyDB"
 app.config['SECRET_KEY'] = creds.APP_SECRET
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config.update(SESSION_COOKIE_SAMESITE="None", SESSION_COOKIE_SECURE=True)
-# Set flask session cache directory, make it if it isnt there
+
+# Set flask and spotify session cache folders, and create if not there
 if not os.path.exists('./.flask_session/'):
     os.makedirs('./.flask_session/')
 app.config['SESSION_FILE_DIR'] = './.flask_session/'
 
+caches_folder = './.spotify_caches/'
+if not os.path.exists(caches_folder):
+    os.makedirs(caches_folder)
+    
+# Set up mysql database connection
 mysql = MySQL(app)
 app.secret_key = creds.APP_SECRET
 API_BASE = 'https://accounts.spotify.com'
 REDIRECT_URI = "http://127.0.0.1:1000/api/"
 SCOPE = 'playlist-modify-private,playlist-modify-public,ugc-image-upload,user-library-read'
 
+# Start session (cookies) and CORS
 Session(app)
 CORS(app, supports_credentials=True)
 app.config['CORS_HEADERS'] = ['Content-Type', 'Authorization']
 
-caches_folder = './.spotify_caches/'
-if not os.path.exists(caches_folder):
-    os.makedirs(caches_folder)
 
+# Gets cache path of current user session
 def session_cache_path():
     session_cache_path_string = caches_folder + session.get("uuid")
     if "not set" in session_cache_path_string:
@@ -44,6 +51,7 @@ def session_cache_path():
     print("Session Cache Path: ", session_cache_path_string)
     return session_cache_path_string
 
+# Main page
 @app.route("/api/", methods=['GET', 'POST'])
 @cross_origin(methods=['GET', 'POST'], supports_credentials=True, headers=['Content-Type', 'Authorization'], origin='http://127.0.0.1:3000')
 def index():
@@ -125,9 +133,7 @@ def verify():
     print("----------------------------END OF SPOTIFY LOGIN VERIFY--------------------------------")
     return redirect(auth_url)
 
-# authorization-code-flow Step 3.
-# Use the access token to access the Spotify Web API;
-# Spotify returns requested data
+# Creates Spotify app based on weather preferences
 @app.route("/api/go", methods=['POST'])
 @cross_origin(methods=['POST'], supports_credentials=True, headers=['Content-Type', 'Authorization'], origin='http://127.0.0.1:3000')
 def go():

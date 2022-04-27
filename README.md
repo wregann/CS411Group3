@@ -30,7 +30,7 @@ There is no environment included in this repo, so having your own install of pyt
     <li>cd to frontend folder in terminal</li>
     <li>Run npm install in terminal</li>
     <li>Run npm run dev in terminal</li>
-    <li>Lastly, go to localhost:3000</li>
+    <li>Lastly, go to localhost:3000 on a browser that supports cookies</li>
 </ol>
 
 ## Backend Contents
