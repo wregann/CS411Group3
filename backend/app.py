@@ -144,6 +144,7 @@ def go():
     weather_main = data['main']
     weather_description = data['description']
     temperature = data['temperature']
+    playlist_name = "Weatherify Playlist (Temp={0}) (Main={1}) (Desc={2})".format(temperature, weather_main, weather_description)
 
     if weather_main == None or weather_description == None or temperature == None:
         print("Your post request was missing some required paramaters")
@@ -266,7 +267,6 @@ def go():
     custom_ids = [x[0] for x in cursor.fetchall()]
     cursor.close()
     
-    playlist_name = "Weatherify Test Playlist (Temp={0}) (Main={1}) (Desc={2})".format(temperature, weather_main, weather_description)
     playlists = [p['name'] for p in sp.user_playlists(user=spotify_user_id)['items']]
     if playlist_name not in playlists:
         sp.user_playlist_create(user=spotify_user_id, name=playlist_name)
@@ -368,15 +368,14 @@ def get_custom_playlist_sql(main_weather: str, description_weather: str, temp: i
     valence_std = user_pop_stats['valence_std']
     
     # Get tempo parameters based on temperature
-    if temp <= 272:
+    if temp <= 30:
         tempo_upper = tempo_avg - tempo_std
-    elif temp >= 300:
+    elif temp >= 80:
         tempo_lower = tempo_avg + tempo_std
     else:
-        tempo_lower_int = tempo_avg - tempo_std
-        tempo_cent = (tempo_std * (300 - temp) / 14)  + tempo_lower_int
-        tempo_lower = tempo_cent - 0.5*tempo_std
-        tempo_upper = tempo_cent + 0.5*tempo_std
+        tempo_cent = temp
+        tempo_lower = tempo_cent - 0.65*tempo_std
+        tempo_upper = tempo_cent + 0.65*tempo_std
     
     tempo_str = "tempo >= {0} AND tempo <= {1}".format(tempo_lower, tempo_upper)
 
