@@ -84,7 +84,7 @@
 <script>
 import axios from 'axios';
 import TheLoader from '@/components/TheLoader.vue'
-s
+
 export default {
   el: '#app',
   components: {

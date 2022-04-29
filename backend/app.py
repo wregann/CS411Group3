@@ -373,10 +373,10 @@ def get_custom_playlist_sql(main_weather: str, description_weather: str, temp: i
     elif temp >= 80:
         tempo_lower = tempo_avg + tempo_std
     else:
-        tempo_cent = temp
-        tempo_lower = tempo_cent - 0.65*tempo_std
-        tempo_upper = tempo_cent + 0.65*tempo_std
-    
+        tempo_cent = tempo_avg - tempo_std + 2 * tempo_std * ((temp - 30) / 50)
+        tempo_lower = tempo_cent - 0.4*tempo_std
+        tempo_upper = tempo_cent + 0.4*tempo_std
+   
     tempo_str = "tempo >= {0} AND tempo <= {1}".format(tempo_lower, tempo_upper)
 
     # Get energy and valence parameters based on weather
